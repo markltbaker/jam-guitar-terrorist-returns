@@ -12,7 +12,7 @@
         // set which sprite to use -- should match up with a call to Crafty.sprite()
         spriteName: function(name) {
             this.requires(name)
-            return this;
+            return this; // so we can chain calls to setup functions
         } 
     });
 
