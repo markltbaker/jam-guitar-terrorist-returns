@@ -11,7 +11,7 @@
         },
         // set which sprite to use -- should match up with a call to Crafty.sprite()
         spriteName: function(name) {
-            this.requires(name)
+            this.requires(name);
             return this; // so we can chain calls to setup functions
         } 
     });
@@ -35,7 +35,7 @@
             // reminder: be careful to avoid name clashes...
             this._fadeSpeed = speed;
             return this; // so we can chain calls to setup functions
-        },
+        }
     });
 
     // rotate an entity continually
@@ -142,7 +142,7 @@
                 this.checkOutOfBounds(oldPosition);
             });
             // when we hit some space junk, react to it
-            this.onHit('SpaceJunk', this.hitSpaceJunk)
+            this.onHit('SpaceJunk', this.hitSpaceJunk);
         },
         // we hit something!
         hitSpaceJunk: function() {
