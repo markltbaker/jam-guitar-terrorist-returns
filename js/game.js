@@ -55,7 +55,7 @@
 
             if (score.score < 0) {
                 // dead
-                Crafty.e("Explosion").attr({x:this.x, y:this.y})
+                Crafty.e("Explosion").attr({x:this.x, y:this.y});
                 this.destroy();
             }
         },
@@ -79,7 +79,6 @@
                 this.destroy();
             }
         }
-
     });
 
     Crafty.c('Rotate', {
