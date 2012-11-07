@@ -25,6 +25,7 @@
             this.bind("EnterFrame", function() {
                 this.alpha = Math.max(this._alpha - this._fadeSpeed, 0.0);
                 if (this.alpha < 0.05) {
+                    this.trigger('Faded');
                     // its practically invisible at this point, remove the object
                     this.destroy();
                 }
@@ -58,54 +59,74 @@
     });
 
     // an exciting explosion!
+    Crafty.c('Corpse', {
+        init: function() {
+            // reuse some helpful components
+            this.requires('Renderable, FadeOut, corpse')
+                .fadeOut(0.005);
+        }
+    });
+
     Crafty.c('Explosion', {
         init: function() {
             // reuse some helpful components
-            this.requires('Renderable, FadeOut, Rotate')
-                .spriteName('explosion')
-                .rotate(4)
-                .fadeOut(0.05);
+            this.requires('Renderable, FadeOut, explosion')
+                .fadeOut(0.1)
+                .bind("Faded", function () {
+                    Crafty.e('Corpse').attr({x: this.x, y:this.y});
+                });
+        }
+    });
+
+    // music OF DEATH
+    Crafty.c('Music', {
+        init: function() {
+            this.requires('Renderable, Collision, Delay, note' + Crafty.math.randomInt(1,3))
+                .collision()
+                .bind("EnterFrame", function() {
+                    this.x += 10;
+                    if (this.x > 1024) {
+                        this.destroy();
+                    }
+                })
+                .onHit('Target', function() {
+                    if (this._dead !== true) {
+                        this._dead = true;
+                        this.delay(function() {
+                            this.destroy();
+                        }, 1);
+                    }
+                });
         }
     });
 
     
-    // Space Junk component - player must dodge this!
-    Crafty.c('SpaceJunk', {
+    // targets to shoot at
+    Crafty.c('Target', {
         init: function() {
-            this.requires('Renderable, Rotate')                
-                .bind("EnterFrame", this._updateJunk);
+            this.requires('Renderable, Collision, Delay, target' + Crafty.math.randomInt(1,2))
+                .collision()
+                .onHit('Music', this.hitByMusic);
+            this._randomlyPosition();            
         },
-        // set up the space junk
-        spaceJunk: function(sprite) {            
-            this.spriteName(sprite);
-
-            // set tighter collision bound
-            var x = this.x + 10;
-            var y = this.y + 10;
-            var x2 = this.x + this.w - 20;
-            var y2 = this.y + this.h - 20;
-
-            this.requires("Collision")               
-                .collision(new Crafty.polygon([x,y],[x,y2],[x2,y2],[x2,y]));
-
-            this._randomlyPosition();
-        },
-        // randomly position the space junk to the right of the screen
+        // randomly position 
         _randomlyPosition: function() {
-            this.rotate(Crafty.math.randomNumber(-5,5));
-            this._xSpeed = Crafty.math.randomNumber(1,10);
-            this.attr({x: 1024, y: Crafty.math.randomInt(0,600-this.h)});
+            //this.rotate(Crafty.math.randomNumber(-5,5));
+            this.attr({
+                x: Crafty.math.randomNumber(500, 800), 
+                y: Crafty.math.randomNumber(0,600-this.h)});
         },
-        // update space junk each frame
-        _updateJunk: function() {
-            // move to the left of the screen
-            this.x = this._x - this._xSpeed            
+        // we hit something!
+        hitByMusic: function() {
+            // find the global 'Score' component
+            var score = Crafty('Score');
+            score.increment();
 
-            //  when off screen, re-position to come back on the screen!
-            if ((this.x + this.w) < 0) {
-                this._randomlyPosition();
-            } 
-        }
+            // replace the ship with an explosion!
+            Crafty.e("Explosion").attr({x:this.x, y:this.y});
+            this.x = -2000;
+            this.delay(this._randomlyPosition, 1000);
+        },
     });
 
     // Limit movement to within the viewport
@@ -125,55 +146,38 @@
     Crafty.c('Player', {        
         init: function() {           
             this.requires('Renderable, Fourway, Collision, ViewportBounded')
-                .spriteName('rocket')
-                .attr({x: 64, y: 64,w:199, h:96})
-                // set the speed and controls
+                .spriteName('terrorist')
+                .attr({x: 64, y: 64})
                 .fourway(5)
-                // create a custom hit map here:
-                .collision(new Crafty.polygon(
-                    [10, 40],
-                    [10, 80],
-                    [180, 80],
-                    [180, 40]
-                ));
+                .collision()
+                .requires('Keyboard')
+                .bind('KeyDown', function(e) {
+                    if (e.key === Crafty.keys.SPACE) {
+                        // fire music
+                        Crafty.e("Music").attr({x: this.x + 130, y: this.y + 40});
+                    }
+                });
 
             // bind our movement handler to keep us within the Viewport
             this.bind('Moved', function(oldPosition) {
                 this.checkOutOfBounds(oldPosition);
             });
-            // when we hit some space junk, react to it
-            this.onHit('SpaceJunk', this.hitSpaceJunk);
-        },
-        // we hit something!
-        hitSpaceJunk: function() {
-            // find the global 'Score' component
-            var score = Crafty('Score');
-            score.decrement();
-
-            // is the player dead?
-            if (score.score < 0) {
-                // replace the ship with an explosion!
-                Crafty.e("Explosion").attr({x:this.x, y:this.y});
-                this.destroy();
-            }
         },
     });
 
     // A component to display the player's score
     Crafty.c('Score', {
         init: function() {
-            this.score = 100;
+            this.score = 0;
             this.requires('2D, DOM, Text');
             this._textGen = function() {
                 return "Score: " + this.score;
             };
             this.attr({w: 100, h: 20, x: 900, y: 0})
                 .text(this._textGen);
-            // todo: also track time played
         },
-        // decrement the score (todo: make it player health)
-        decrement: function() {
-            this.score = this.score - 1;
+        increment: function() {
+            this.score = this.score + 1;
             this.text(this._textGen);
         }
     })
@@ -207,12 +211,14 @@
         
         function onLoaded() {
             // set up sprites
-            Crafty.sprite('img/rocket.png', {rocket: [0, 0, 198, 96] });
-            Crafty.sprite('img/rock.png', {asteroid: [0, 0, 198, 187] });
-            Crafty.sprite('img/atom.png', {fuel: [0, 0, 198, 158] });
-            Crafty.sprite('img/satellite.png', {satellite: [0,0, 198, 176] });
-            Crafty.sprite('img/explode.png', {explosion: [0,0,180,180]});
-            Crafty.sprite('img/debris.png', {debris: [0,0,64,64]});
+            Crafty.sprite('img/terrorist.png', {terrorist: [0, 0, 243, 177] });
+            Crafty.sprite('img/note1.png', {note1: [0, 0, 100, 123] });
+            Crafty.sprite('img/note2.png', {note2: [0, 0, 81, 87] });
+            Crafty.sprite('img/note3.png', {note3: [0, 0, 74, 103] });             
+            Crafty.sprite('img/mother1.png', {target1: [0, 0, 115, 162] });
+            Crafty.sprite('img/mother2.png', {target2: [0, 0, 128, 130] });
+            Crafty.sprite('img/ash.png', {corpse: [0, 0, 54, 72] });
+            Crafty.sprite('img/zap.png', {explosion: [0, 0, 128, 159] });
 
             // jump to the main scene in half a second
             loading.delay(function() {
@@ -230,12 +236,14 @@
         
         Crafty.load([
             // list of images to load
-            'img/atom.png',
-            'img/rock.png',
-            'img/rocket.png',
-            'img/satellite.png',
-            'img/explode.png',
-            'img/debris.png'
+            'img/terrorist.png',
+            'img/mother1.png',
+            'img/mother2.png',
+            'img/note1.png',
+            'img/note2.png',
+            'img/note3.png',
+            'img/ash.png',
+            'img/zap.png'
         ], 
         onLoaded, onProgress, onError);
         
@@ -252,9 +260,9 @@
         Crafty.e('Player');
         
         // create some junk to avoid
-        Crafty.e('SpaceJunk').spaceJunk('asteroid');
-        Crafty.e('SpaceJunk').spaceJunk('asteroid');
-        Crafty.e('SpaceJunk').spaceJunk('satellite');
+        for (i = 0; i < 5; i++) {
+            Crafty.e('Target');
+        }
     };
     
     // kick off the game when the web page is ready
