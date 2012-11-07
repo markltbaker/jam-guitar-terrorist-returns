@@ -1,5 +1,5 @@
 (function() {
-    
+
     Crafty.c('ViewportBounded', {
         init: function() {
             this.requires('2D');
@@ -11,12 +11,25 @@
             }
         }
     });
+
+    // a renderable entity -- provide utility function for setting name
+    // also can change DOM/Canvas here
+    Crafty.c('Renderable', {
+        init: function() {
+            this.requires('2D, DOM, Sprite');
+        },
+        spriteName: function(name) {
+            this.requires(name)
+            return this;
+        } 
+    });
     
 
     // Player component    
-    Crafty.c('Player', {
+    Crafty.c('Player', {        
         init: function() {           
-            this.requires('2D, DOM, Sprite, Fourway, rocket, Collision, ViewportBounded')
+            this.requires('Renderable, Fourway, Collision, ViewportBounded')
+                .spriteName('rocket')
                 .attr({x: 64, y: 64,w:199, h:96})
                 // set the speed and controls
                 .fourway(5)
@@ -27,24 +40,84 @@
                     [180, 80],
                     [180, 40]
                 ));
-            
+
             //bind our movement handler to the NewDirection event
             this.bind('Moved', function(oldPosition) {
                 this.checkOutOfBounds(oldPosition);
             });
+            this.onHit('SpaceJunk', this.hitSpaceJunk)
+
+        },
+
+        hitSpaceJunk: function() {
+            var score = Crafty('Score');
+            score.decrement();
+
+            if (score.score < 0) {
+                // dead
+                Crafty.e("Explosion").attr({x:this.x, y:this.y})
+                this.destroy();
+            }
+        },
+
+    });
+
+
+    Crafty.c('FadeOut', {
+        init: function() {
+            this.requires('2D')
+                .bind("EnterFrame", this._updateFade);
+
+        },
+        fadeOut: function(speed) {
+            this._fadeSpeed = speed;
+            return this;
+        },
+        _updateFade: function() {
+            this.alpha = Math.max(this._alpha  - this._fadeSpeed, 0.0);
+            if (this.alpha < 0.05) {
+                this.destroy();
+            }
+        }
+
+    });
+
+    Crafty.c('Rotate', {
+        init: function() {
+            this.requires('2D')
+                .bind("EnterFrame", this._updateRotation);
+        },
+        rotate: function(speed) {                
+            this.origin('center');
+            this._rotationSpeed = speed;
+            return this;
+        },
+        _updateRotation: function() {
+            this.rotation = this._rotation + this._rotationSpeed;
         }
     });
+
+    Crafty.c('Explosion', {
+        init: function() {
+            this.requires('Renderable, FadeOut, Rotate')
+                .spriteName('explosion')
+                .rotate(4)
+                .fadeOut(0.05);
+        }
+    });
+
     
     // Space Junk component - player must dodget this!
     Crafty.c('SpaceJunk', {
         init: function() {
-            this.requires('2D, DOM, Sprite')                
+            this.requires('Renderable, Rotate')                
                 .bind("EnterFrame", this._updateJunk);
         },
 
-        spaceJunk: function(type) {            
-            this.requires(type)
-                .origin("center");
+        spaceJunk: function(sprite) {            
+            this.spriteName(sprite);
+
+            // set tighter collision bound
             var x = this.x + 10;
             var y = this.y + 10;
             var x2 = this.x + this.w - 20;
@@ -53,37 +126,30 @@
             this.requires("Collision")               
                 .collision(new Crafty.polygon([x,y],[x,y2],[x2,y2],[x2,y]));
 
-            //this.requires("WiredHitBox");
             this._randomlyPosition();
         },
 
         _randomlyPosition: function() {
-            this.rotationSpeed = Crafty.math.randomNumber(-5,5);
-            this.speed = Crafty.math.randomNumber(1,10);
+            this.rotate(Crafty.math.randomNumber(-5,5));
+            this._xSpeed = Crafty.math.randomNumber(1,10);
             this.attr({x: 1024, y: Crafty.math.randomInt(0,600-this.h)});
         },
 
         _updateJunk: function() {
-            this.rotation += this.rotationSpeed;
-            this.x -= this.speed            
+            this.x = this._x - this._xSpeed            
 
             if ((this.x + this.w) < 0) {
+                //  when off screen, re-position to come back on the screen!
                 this._randomlyPosition();
-            } else {
-
-                var hit = this.hit("Player");
-                if (hit) {
-                    this.trigger('HitPlayer');
-                }
-            }
+            } 
         }
     });
 
     // A component to display the player's score
     Crafty.c('Score', {
         init: function() {
-            this.score = 0;
-            this.requires('2D, Canvas, Text');
+            this.score = 100;
+            this.requires('2D, DOM, Text');
             this._textGen = function() {
                 return "Score: " + this.score;
             };
@@ -132,6 +198,8 @@
             Crafty.sprite('img/rock.png', {asteroid: [0, 0, 198, 187] });
             Crafty.sprite('img/atom.png', {fuel: [0, 0, 198, 158] });
             Crafty.sprite('img/satellite.png', {satellite: [0,0, 198, 176] });
+            Crafty.sprite('img/explode.png', {explosion: [0,0,180,180]});
+            Crafty.sprite('img/debris.png', {debris: [0,0,64,64]});
 
             loading.delay(function() {
                 Crafty.scene('main');
@@ -150,7 +218,9 @@
             'img/atom.png',
             'img/rock.png',
             'img/rocket.png',
-            'img/satellite.png'
+            'img/satellite.png',
+            'img/explode.png',
+            'img/debris.png'
         ], 
         onLoaded, onProgress, onError);
         
@@ -161,6 +231,7 @@
     //
     Game.prototype.mainScene = function() {
         //create a player...
+        playerHealth = 1000;
         var player = Crafty.e('Player');
         
         var spaceJunk = [
@@ -171,14 +242,6 @@
 
         
         var score = Crafty.e('Score');
-        
-        // player.bind('HitEnemy', function() {
-        //     score.increment();
-        // });
-        
-        Crafty('SpaceJunk').bind('HitPlayer', function() {
-             score.decrement();
-        });
     };
     
     $(document).ready(function() {
