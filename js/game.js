@@ -73,7 +73,7 @@
             this.requires('Renderable, FadeOut, explosion')
                 .fadeOut(0.1)
                 .bind("Faded", function () {
-                    Crafty.e('Corpse').attr({x: this.x, y:this.y});
+                    Crafty.e('Corpse').attr({x: this.x+10, y:this.y+70});
                 });
         }
     });
@@ -145,9 +145,11 @@
     // Player component    
     Crafty.c('Player', {        
         init: function() {           
-            this.requires('Renderable, Fourway, Collision, ViewportBounded')
+            this.requires('Renderable, Fourway, Collision, ViewportBounded, SpriteAnimation')
                 .spriteName('terrorist')
                 .attr({x: 64, y: 64})
+                .animate('walk', [[0,0],[243,0],[243*2,0]])
+                .animate('walk', 50, -1)
                 .fourway(5)
                 .collision()
                 .requires('Keyboard')
